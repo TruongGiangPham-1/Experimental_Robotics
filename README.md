@@ -1,4 +1,4 @@
-# Experimental_Robotics
+# Experimental_Robotics CMPUT 412/503
 
 [Course Website](https://truonggiangpham-1.github.io/412-projects/)
 
