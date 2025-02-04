@@ -1,7 +1,7 @@
 # parameters
-ARG REPO_NAME="assignment2"
+ARG REPO_NAME="Experimental_Robotics/exercise2"
 ARG DESCRIPTION="assignment 2 solution"
-ARG MAINTAINER="Dikshant (ddikshan@ualberta.ca)"
+ARG MAINTAINER="TruongGiangPham (truonggi@ualberta.ca)"
 # pick an icon from: https://fontawesome.com/v4.7.0/icons/
 ARG ICON="cube"
 
