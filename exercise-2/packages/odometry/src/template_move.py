@@ -6,6 +6,8 @@ import rospy
 from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import WheelEncoderStamped, WheelsCmdStamped
 import math
+import time
+import numpy as np
 
 # throttle and direction for  each wheel
 THROTTLE_LEFT = 0.4        # 50% throttle
@@ -27,6 +29,7 @@ class MoveNode(DTROS):
         # for wheel subscriber topic ----------------------------------------------------
         self._left_encoder_topic = f"/{self._vehicle_name}/left_wheel_encoder_node/tick"
         self._right_encoder_topic = f"/{self._vehicle_name}/right_wheel_encoder_node/tick"
+        #self._left_vel_topic = f"/{self._vehicle_name}/encoder_node/encoder_velocity/vel_encoder"
         # temporary data storage
         self._ticks_left = None
         self._ticks_right = None
@@ -35,6 +38,8 @@ class MoveNode(DTROS):
         # construct subscriber
         self.sub_left = rospy.Subscriber(self._left_encoder_topic, WheelEncoderStamped, self.callback_left)
         self.sub_right = rospy.Subscriber(self._right_encoder_topic, WheelEncoderStamped, self.callback_right)
+
+        self.sub_vel = rospy.Subscriber(self._right_encoder_topic, WheelEncoderStamped, self.vel_callback)
 
         # for wheel pulisher topic -------------------------------------------------------
         # url: https://docs.duckietown.com/daffy/devmanual-software/beginner/ros/wheel-control.html
@@ -47,6 +52,8 @@ class MoveNode(DTROS):
         self._publisher = rospy.Publisher(wheels_topic, WheelsCmdStamped, queue_size=1)
 
         self.radius = rospy.get_param(f'/{self._vehicle_name}/kinematics_node/radius', 0.0325)  # in meter
+        self.distance_between_wheels = rospy.get_param(f'/{self._vehicle_name}/kinematics_node/baseline', 0.1) # in meter
+
 
         #print(f'radiums {radius}')
         # subscribe to the left and right wheel encoder topics
@@ -54,15 +61,21 @@ class MoveNode(DTROS):
 
         # LEDs
 
+        self.time_init = None
+        self.robot_frame = np.zeros(3, dtype=float)
+        self.robot_frame_right = np.zeros(3, dtype=float)
+        self.robot_frame_left = np.zeros(3, dtype=float)
         # define other variables    
         pass
         
+    def vel_callback(self, data):
+
+        return
+
     def callback(self, data):
         # add your code here
         # can define one or two depending on how you want to implement      
         # log general information once at the beginning
-
-
         pass
         
     def callback_left(self, data):
@@ -72,7 +85,10 @@ class MoveNode(DTROS):
         # store data value
         if self._ticks_left == None:
             self._ticks_left_init = data.data
+            self.time_start = time.time()
         self._ticks_left = data.data
+        self._left_wheel_speed = (self._ticks_left - self._ticks_left_init) / (time.time() - self.time_start)
+
         self.delta_x_left = (2*self.radius*math.pi*(self._ticks_left - self._ticks_left_init)) / TICK_TOTAL
 
     def callback_right(self, data):
@@ -83,25 +99,63 @@ class MoveNode(DTROS):
 
         if self._ticks_right == None:
             self._ticks_right_init = data.data
+            self.time_start = time.time()
         self._ticks_right = data.data
+
+        self._right_wheel_speed = (self._ticks_right - self._ticks_right_init) / (time.time() - self.time_start)
         self.delta_x_right = (2*self.radius*math.pi*(self._ticks_right - self._ticks_right_init)) / TICK_TOTAL
+
+        #self.robot_frame[2] += (self.radius* (self._vel_right)) / 2*self.distance_between_wheels
 
     def compute_distance_traveled(self, **kwargs):
         # add your code here
 
         pass
     
-    def drive_straight(self, **kwargs):
-        # add your code here
-        pass
     
-    def rotate_clockwise(self, **kwargs):
+    def rotate_clockwise(self, angle):
         # add your code here
-        pass
+        rospy.sleep(2)  # wait for the node to initialize
 
-    def rotate_anticlockwise(self, **kwargs):
+        turn_msg = WheelsCmdStamped(vel_left=self._vel_left, vel_right=-self._vel_right)
+        rate = rospy.Rate(20)
+        print(f'numerators - {self.delta_x_left - self.delta_x_right}')
+
+        print(f'dist {self.distance_between_wheels}')
+        while not rospy.is_shutdown():
+            self._publisher.publish(turn_msg)
+            print(f'distance right {self.delta_x_right}  left {self.delta_x_left} ')
+            self.robot_frame[2] = (np.abs(self.delta_x_left) + np.abs(self.delta_x_right)) / (self.distance_between_wheels)
+            print(f"robot angle = {self.robot_frame[2]}")
+            #if (self.robot_frame[2] - angle) % 2*math.pi < 0.1:
+            if self.robot_frame[2] > angle:
+                stop = WheelsCmdStamped(vel_left=0, vel_right=0)
+                self._publisher.publish(stop)
+                return
+            rate.sleep()
+        return
+
+    def rotate_anticlockwise(self, angle):
         # add your code here
-        pass
+        rospy.sleep(1)  # wait for the node to initialize
+        print(f'in anticlockwise')
+        turn_msg = WheelsCmdStamped(vel_left=-self._vel_left, vel_right=self._vel_right)
+        rate = rospy.Rate(20)
+        init_angle = self.robot_frame[2]
+        self._ticks_left_init = self._ticks_left
+        self._ticks_right_init = self._ticks_right
+        rospy.sleep(1)
+        while not rospy.is_shutdown():
+            print(f'here')
+            self._publisher.publish(turn_msg)
+            self.robot_frame[2] = (np.abs(self.delta_x_left) + np.abs(self.delta_x_right)) / (self.distance_between_wheels)
+            print(f"robot angle = {self.robot_frame[2]}")
+            #if (self.robot_frame[2] - angle) % 2*math.pi < 0.1:
+            if self.robot_frame[2] > angle:
+                stop = WheelsCmdStamped(vel_left=0, vel_right=0)
+                self._publisher.publish(stop)
+                return
+            rate.sleep()
 
     def use_leds(self, **kwargs):
         # add your code here
@@ -109,7 +163,7 @@ class MoveNode(DTROS):
 
     # define other functions if needed
     
-    def run_subscriber(self):
+    def drive_straight_n_back(self):
         rospy.sleep(2)  # wait for the node to initialize
 
         # add your code here
@@ -135,8 +189,6 @@ class MoveNode(DTROS):
                 if self.delta_x_left < 0 and self.delta_x_right < 0:
                     self._publisher.publish(stop)
                     break
-                    
-
                 if is_forward:
                     self._publisher.publish(forward_message)
                 else:
@@ -166,6 +218,8 @@ if __name__ == '__main__':
     # create the node
     node = MoveNode(node_name='move_node')
     # run the timer in node
-    node.run_subscriber()
+    #node.drive_straight_n_back()
+    node.rotate_clockwise(math.pi / 2)
+    node.rotate_anticlockwise(math.pi / 2)
     # keep spinning
     rospy.spin()
