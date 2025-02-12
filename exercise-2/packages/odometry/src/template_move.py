@@ -151,17 +151,17 @@ class MoveNode(DTROS):
         turn_msg = WheelsCmdStamped(vel_left=self._vel_left, vel_right=-self._vel_right)
         rate = rospy.Rate(20)
 
-        initial_angle = self.robot_frame[2]
+        #initial_angle = self.robot_frame[2]
 
         print(f'dist {self.distance_between_wheels}')
         while not rospy.is_shutdown():
             self._publisher.publish(turn_msg)
             #print(f'distance right {self.delta_x_right}  left {self.delta_x_left} ')
-            self.robot_frame[2] = (np.abs(self.delta_x_left) + np.abs(self.delta_x_right)) / (self.distance_between_wheels)
+            self.robot_frame[2] = (np.abs(self.delta_x_left) + np.abs(self.delta_x_right)) / (self.distance_between_wheels)  # change of angle since begininng
             #if (self.robot_frame[2] - angle) % 2*math.pi < 0.1:
             print(f'theta {self.robot_frame[2]}')
             current_angle = self.robot_frame[2]
-            if (current_angle - initial_angle) > angle:
+            if (self.robot_frame[2]) > angle:
                 stop = WheelsCmdStamped(vel_left=0, vel_right=0)
                 self._publisher.publish(stop)
                 return
