@@ -24,6 +24,7 @@ class MoveNode(DTROS):
 
         # initialize the DTROS parent class
         super(MoveNode, self).__init__(node_name=node_name, node_type=NodeType.GENERIC)
+        self.time_init = rospy.Time.now().to_sec()
         # static parameters
         self._vehicle_name = os.environ['VEHICLE_NAME']
         # for wheel subscriber topic ----------------------------------------------------
@@ -39,7 +40,6 @@ class MoveNode(DTROS):
         self.sub_left = rospy.Subscriber(self._left_encoder_topic, WheelEncoderStamped, self.callback_left)
         self.sub_right = rospy.Subscriber(self._right_encoder_topic, WheelEncoderStamped, self.callback_right)
 
-        self.sub_vel = rospy.Subscriber(self._right_encoder_topic, WheelEncoderStamped, self.vel_callback)
 
         # for wheel pulisher topic -------------------------------------------------------
         # url: https://docs.duckietown.com/daffy/devmanual-software/beginner/ros/wheel-control.html
@@ -60,8 +60,9 @@ class MoveNode(DTROS):
         # publish to the wheels command topic
 
         # LEDs
+        self.sub_vel = rospy.Subscriber(self._right_encoder_topic, WheelEncoderStamped, self.vel_callback)
 
-        self.time_init = None
+        self.led = rospy.Publisher(f"/{self._vehicle_name}/led_emitter_node/led_pattern")
         self.robot_frame = np.zeros(3, dtype=float)
         self.robot_frame_right = np.zeros(3, dtype=float)
         self.robot_frame_left = np.zeros(3, dtype=float)
@@ -69,13 +70,33 @@ class MoveNode(DTROS):
         pass
         
     def vel_callback(self, data):
+        # velocicy
+        if self._ticks_left == None or self._ticks_right == None or self._ticks_left_init == None or self._ticks_right_init == None:
+            return
 
+        #self._left_wheel_speed = (self._ticks_left - self._ticks_left_init) / (rospy.Time.now().to_sec() - self.time_init) 
+        #self._right_wheel_speed = (self._ticks_right - self._ticks_right_init) / (rospy.Time.now().to_sec() - self.time_init)
+
+        # distance the left wheel traveled since the last callback
+        self.delta_x_left = (2*self.radius*math.pi*(self._ticks_left - self._ticks_left_init)) / TICK_TOTAL  
+        self.delta_x_right = (2*self.radius*math.pi*(self._ticks_right - self._ticks_right_init)) / TICK_TOTAL
+
+        # update the robot theta (x, y, theta)
+        #self.robot_frame_left[2] += self.delta_x_left / (self.distance_between_wheels / 2)
+
+        self.robot_frame[2] = (self.delta_x_right - self.delta_x_left) / self.distance_between_wheels
+
+        # update tick init
+        self._ticks_left_init = self._ticks_left  
+        self._ticks_right_init = self._ticks_right
         return
 
     def callback(self, data):
         # add your code here
         # can define one or two depending on how you want to implement      
         # log general information once at the beginning
+        
+
         pass
         
     def callback_left(self, data):
@@ -87,9 +108,15 @@ class MoveNode(DTROS):
             self._ticks_left_init = data.data
             self.time_start = time.time()
         self._ticks_left = data.data
-        self._left_wheel_speed = (self._ticks_left - self._ticks_left_init) / (time.time() - self.time_start)
 
-        self.delta_x_left = (2*self.radius*math.pi*(self._ticks_left - self._ticks_left_init)) / TICK_TOTAL
+        # distance the left wheel traveled since the beginning of time
+        self.delta_x_left = (2*self.radius*math.pi*(self._ticks_left - self._ticks_left_init)) / TICK_TOTAL  
+
+        ## update the robot theta (x, y, theta)
+        #self.robot_frame_left[2] += self.delta_x_left / (self.distance_between_wheels / 2)
+
+        ## update tick init
+        #self._ticks_left_init = self._ticks_left  
 
     def callback_right(self, data):
         # log general information once at the beginning
@@ -102,10 +129,14 @@ class MoveNode(DTROS):
             self.time_start = time.time()
         self._ticks_right = data.data
 
-        self._right_wheel_speed = (self._ticks_right - self._ticks_right_init) / (time.time() - self.time_start)
-        self.delta_x_right = (2*self.radius*math.pi*(self._ticks_right - self._ticks_right_init)) / TICK_TOTAL
+        ## distance the right wheel traveled since the last callback
+        #self._right_wheel_speed = (self._ticks_right - self._ticks_right_init) / (time.time() - self.time_start)
 
-        #self.robot_frame[2] += (self.radius* (self._vel_right)) / 2*self.distance_between_wheels
+        #self.delta_x_right = (2*self.radius*math.pi*(self._ticks_right - self._ticks_right_init)) / TICK_TOTAL
+
+        #self.robot_frame_right[2] += self.delta_x_right / (self.distance_between_wheels / 2)
+
+        #self._ticks_right_init = self._ticks_right
 
     def compute_distance_traveled(self, **kwargs):
         # add your code here
@@ -119,16 +150,18 @@ class MoveNode(DTROS):
 
         turn_msg = WheelsCmdStamped(vel_left=self._vel_left, vel_right=-self._vel_right)
         rate = rospy.Rate(20)
-        print(f'numerators - {self.delta_x_left - self.delta_x_right}')
+
+        initial_angle = self.robot_frame[2]
 
         print(f'dist {self.distance_between_wheels}')
         while not rospy.is_shutdown():
             self._publisher.publish(turn_msg)
-            print(f'distance right {self.delta_x_right}  left {self.delta_x_left} ')
+            #print(f'distance right {self.delta_x_right}  left {self.delta_x_left} ')
             self.robot_frame[2] = (np.abs(self.delta_x_left) + np.abs(self.delta_x_right)) / (self.distance_between_wheels)
-            print(f"robot angle = {self.robot_frame[2]}")
             #if (self.robot_frame[2] - angle) % 2*math.pi < 0.1:
-            if self.robot_frame[2] > angle:
+            print(f'theta {self.robot_frame[2]}')
+            current_angle = self.robot_frame[2]
+            if (current_angle - initial_angle) > angle:
                 stop = WheelsCmdStamped(vel_left=0, vel_right=0)
                 self._publisher.publish(stop)
                 return
@@ -209,7 +242,7 @@ class MoveNode(DTROS):
             self._publisher.publish(message)
             rate.sleep()
     def on_shutdown(self):
-        stop = WheelsCmdStamped(vel_left=0, vel_right=0)
+        stop = WheelsCmdStamped(vel_left=0, vel_right=0 )
         self._publisher.publish(stop)
 
 if __name__ == '__main__':
@@ -220,6 +253,5 @@ if __name__ == '__main__':
     # run the timer in node
     #node.drive_straight_n_back()
     node.rotate_clockwise(math.pi / 2)
-    node.rotate_anticlockwise(math.pi / 2)
     # keep spinning
     rospy.spin()
