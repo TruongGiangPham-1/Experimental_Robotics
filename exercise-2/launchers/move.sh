@@ -6,7 +6,7 @@ source /environment.sh
 dt-launchfile-init
 
 # launch subscriber
-rosrun odometry template_move.py
+rosrun odometry nicolas_move.py
 
 # wait for app to end
 dt-launchfile-join

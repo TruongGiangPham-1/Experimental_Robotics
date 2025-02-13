@@ -84,7 +84,7 @@ class MoveNode(DTROS):
         # update the robot theta (x, y, theta)
         #self.robot_frame_left[2] += self.delta_x_left / (self.distance_between_wheels / 2)
 
-        self.robot_frame[2] = (self.delta_x_right - self.delta_x_left) / self.distance_between_wheels
+        self.robot_frame[2] += (self.delta_x_right - self.delta_x_left) / self.distance_between_wheels
 
         # update tick init
         self._ticks_left_init = self._ticks_left  
@@ -110,7 +110,7 @@ class MoveNode(DTROS):
         self._ticks_left = data.data
 
         # distance the left wheel traveled since the beginning of time
-        self.delta_x_left = (2*self.radius*math.pi*(self._ticks_left - self._ticks_left_init)) / TICK_TOTAL  
+        #self.delta_x_left = (2*self.radius*math.pi*(self._ticks_left - self._ticks_left_init)) / TICK_TOTAL  
 
         ## update the robot theta (x, y, theta)
         #self.robot_frame_left[2] += self.delta_x_left / (self.distance_between_wheels / 2)
@@ -140,7 +140,7 @@ class MoveNode(DTROS):
 
     def compute_distance_traveled(self, **kwargs):
         # add your code here
-
+kkk
         pass
     
     
